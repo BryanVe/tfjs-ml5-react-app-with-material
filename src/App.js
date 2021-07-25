@@ -1,6 +1,7 @@
 import React from 'react';
 import { GeneralLayout } from 'layout';
 import '@tensorflow/tfjs-backend-webgl';
+import { EmotionRecognition } from './components';
 
 const App = () => {
   const [renderedComponentIndex, setRenderedComponentIndex] = React.useState(0);
@@ -13,7 +14,7 @@ const App = () => {
     {
       iconName: 'RE',
       onIconClick: () => setRenderedComponentIndex(1),
-      component: () => <div>RE</div>,
+      component: () => <EmotionRecognition />,
     },
     {
       iconName: 'HM',
