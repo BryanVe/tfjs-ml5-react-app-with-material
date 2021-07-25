@@ -1,9 +1,11 @@
+import { EmotionRecognition } from "./components";
+
 const App = () => {
   return (
     <div className="App">
-      <h1>Initialize project</h1>
+      <EmotionRecognition />
     </div>
   );
-}
+};
 
 export default App;
