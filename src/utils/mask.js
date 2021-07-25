@@ -1,8 +1,3 @@
-import { AnnotatedPrediction } from "@tensorflow-models/face-landmarks-detection/dist/mediapipe-facemesh";
-import {
-  Coord2D,
-  Coords3D,
-} from "@tensorflow-models/face-landmarks-detection/dist/mediapipe-facemesh/util";
 
 const drawMask = ( ctx, keypoints, distance) => {
     const points = [

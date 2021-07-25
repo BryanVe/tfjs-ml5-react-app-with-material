@@ -1,9 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import { makeStyles } from '@material-ui/core/styles';
-import "@tensorflow/tfjs-core";
-import "@tensorflow/tfjs-converter";
-import "@tensorflow/tfjs-backend-webgl";
-import * as faceLandmarksDetection from "@tensorflow-models/face-landmarks-detection";
+//import { load } from "@tensorflow-models/facemesh";
+import { load, SupportedPackages } from "@tensorflow-models/face-landmarks-detection";
 import Webcam from "react-webcam";
 import Card from '@material-ui/core/Card';
 import CardContent from '@material-ui/core/CardContent';
@@ -78,8 +76,8 @@ const FaceMask = (props) => {
     useEffect(() => {
         
         const faceDetector = async () => {
-            const model = await faceLandmarksDetection.load(
-                faceLandmarksDetection.SupportedPackages.mediapipeFacemesh
+            const model = await load(
+                SupportedPackages.mediapipeFacemesh
                 );
             detect(model);
             };
@@ -97,7 +95,7 @@ const FaceMask = (props) => {
         canvas.current.width = videoWidth;
         canvas.current.height = videoHeight;
         const predictions = await model.estimateFaces({
-            input: video,
+            input: video
         });
         if(canvas.current!==null) {
             const ctx = canvas.current.getContext("2d");
@@ -126,7 +124,7 @@ const FaceMask = (props) => {
                     <div className={classes.root}>
                         <Container>
                             <input type="color" onChange={handleInput} value={colorState.current}/>
-                            <input type="text" value={colorState.current} />
+                            <input type="text" onChange={handleInput} value={colorState.current} />
                         </Container>
                         </div>
                     </div>
