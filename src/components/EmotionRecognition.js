@@ -10,6 +10,7 @@ import {
   FormControlLabel,
   Checkbox,
   makeStyles,
+  FormGroup,
 } from '@material-ui/core';
 import {
   AddCircle as AddIcon,
@@ -96,14 +97,18 @@ const EmotionInfo = withStyles((theme) => ({
     emotion,
     numberOfSamples,
     index,
-    onClick,
+    onDeleteClick,
+    onCaptureClick,
     color,
     deleteEnabled,
   }) => {
     return (
       <Paper variant="outlined" className={classes.root}>
         {deleteEnabled && (
-          <IconButton className={classes.delete} onClick={() => onClick(index)}>
+          <IconButton
+            className={classes.delete}
+            onClick={() => onDeleteClick(index)}
+          >
             <DeleteIcon />
           </IconButton>
         )}
@@ -128,6 +133,7 @@ const EmotionInfo = withStyles((theme) => ({
         <Button
           variant="contained"
           color="secondary"
+          onClick={() => onCaptureClick(emotion)}
           className={classes.button}
         >
           Capturar emoción
@@ -178,11 +184,31 @@ const LinearProgressWithLabel = (props) => {
 };
 
 const EmotionRecognition = withStyles((theme) => ({
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  content: {
+    width: '100%',
+    display: 'flex',
+    height: 'calc(100vh - 150px)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   leftContainer: {
-    width: '400px',
+    margin: theme.spacing(5),
+    width: theme.spacing(60),
+    height: 'calc(100vh - 200px)',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'space-between',
+  },
+  rightContainer: {
+    margin: theme.spacing(5),
+    width: theme.spacing(60),
+    height: 'calc(100vh - 200px)',
+    display: 'flex',
+    flexDirection: 'column',
   },
   trainingSection: {
     display: 'flex',
@@ -199,6 +225,10 @@ const EmotionRecognition = withStyles((theme) => ({
   },
   videoContainer: {
     width: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'black',
   },
 }))(({ classes }) => {
   const colors = [
@@ -210,18 +240,13 @@ const EmotionRecognition = withStyles((theme) => ({
     '#ffc400',
   ];
 
-  const [emotions, setEmotions] = useState([
-    {
-      name: 'Feliz',
-      numberOfSamples: 100,
-      probability: 30,
-      color: colors[Math.floor(Math.random() * colors.length)],
-    },
-  ]);
+  const [emotions, setEmotions] = useState([]);
 
   const [trainingProgress, setTrainingProgress] = useState(0);
 
   const [initializing, setInitializing] = useState(true);
+
+  const [currentAction, setCurrentAction] = useState('Inicializar modelo');
 
   const handleNewEmotion = (name) => {
     let _emotions = [...emotions];
@@ -229,6 +254,7 @@ const EmotionRecognition = withStyles((theme) => ({
       name,
       numberOfSamples: 0,
       color: colors[Math.floor(Math.random() * colors.length)],
+      probability: 0,
     });
 
     setEmotions(_emotions);
@@ -239,23 +265,25 @@ const EmotionRecognition = withStyles((theme) => ({
     _emotions.splice(index, 1);
 
     setEmotions(_emotions);
-
-    // TODO Update model parameters
-    // TODO Clean images caché
   };
 
-  //   useEffect(() => {
-  //     const timer = setInterval(() => {
-  //       setTrainingProgress((prevProgress) =>
-  //         prevProgress >= 100 ? 10 : prevProgress + 10
-  //       );
-  //     }, 800);
-  //     return () => {
-  //       clearInterval(timer);
-  //     };
-  //   }, []);
+  const handleCaptureClick = (label) => {
+    if (classifier.current != null) {
+      classifier.current.addImage(label, () => {
+        let _emotions = [...emotions];
 
-  //
+        _emotions.map((_emotion) => {
+          if (_emotion.name === label) {
+            _emotion.numberOfSamples += 1;
+          }
+
+          return _emotion;
+        });
+
+        setEmotions(_emotions);
+      });
+    }
+  };
 
   let faceapi = useRef();
   let mobilenet = useRef();
@@ -266,27 +294,28 @@ const EmotionRecognition = withStyles((theme) => ({
   const width = 400;
   const height = 300;
   let canvas = useRef();
-  let ctx;
-
-  // by default all options are set to true
-  const detectionOptions = {
-    withLandmarks: true,
-    withDescriptors: false,
-  };
+  let ctx = useRef();
 
   useEffect(() => {
+    async function make() {
+      // get the video
+      video.current = await getVideo();
+
+      canvas.current = createCanvas(width, height);
+      ctx.current = canvas.current.getContext('2d');
+
+      faceapi.current = ml5.faceApi(
+        video.current,
+        {
+          withLandmarks: true,
+          withDescriptors: false,
+        },
+        modelReady
+      );
+    }
+
     make();
   }, []);
-
-  async function make() {
-    // get the video
-    video.current = await getVideo();
-
-    canvas.current = createCanvas(width, height);
-    ctx = canvas.current.getContext('2d');
-
-    faceapi.current = ml5.faceApi(video.current, detectionOptions, modelReady);
-  }
 
   function modelReady() {
     console.log('ready!');
@@ -302,10 +331,10 @@ const EmotionRecognition = withStyles((theme) => ({
     detections = result;
 
     // Clear part of the canvas
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, width, height);
+    ctx.current.fillStyle = '#000000';
+    ctx.current.fillRect(0, 0, width, height);
 
-    ctx.drawImage(video.current, 0, 0, width, height);
+    ctx.current.drawImage(video.current, 0, 0, width, height);
 
     if (detections) {
       if (detections.length > 0) {
@@ -328,11 +357,11 @@ const EmotionRecognition = withStyles((theme) => ({
       const boxWidth = alignedRect._box._width;
       const boxHeight = alignedRect._box._height;
 
-      ctx.beginPath();
-      ctx.rect(x, y, boxWidth, boxHeight);
-      ctx.strokeStyle = '#a15ffb';
-      ctx.stroke();
-      ctx.closePath();
+      ctx.current.beginPath();
+      ctx.current.rect(x, y, boxWidth, boxHeight);
+      ctx.current.strokeStyle = '#a15ffb';
+      ctx.current.stroke();
+      ctx.current.closePath();
     }
   }
 
@@ -355,22 +384,22 @@ const EmotionRecognition = withStyles((theme) => ({
   }
 
   function drawPart(feature, closed) {
-    ctx.beginPath();
+    ctx.current.beginPath();
     for (let i = 0; i < feature.length; i += 1) {
       const x = feature[i]._x;
       const y = feature[i]._y;
 
       if (i === 0) {
-        ctx.moveTo(x, y);
+        ctx.current.moveTo(x, y);
       } else {
-        ctx.lineTo(x, y);
+        ctx.current.lineTo(x, y);
       }
     }
 
     if (closed === true) {
-      ctx.closePath();
+      ctx.current.closePath();
     }
-    ctx.stroke();
+    ctx.current.stroke();
   }
 
   // Helper Functions
@@ -414,6 +443,7 @@ const EmotionRecognition = withStyles((theme) => ({
         },
         () => {
           console.log('MobileNet input video ready!');
+          setCurrentAction('Entrenar modelo');
         }
       );
     }
@@ -424,7 +454,7 @@ const EmotionRecognition = withStyles((theme) => ({
       let trainable = emotions.length >= 2;
 
       emotions.forEach((emotion) => {
-        if (emotion.numberOfSamples == 0) {
+        if (emotion.numberOfSamples === 0) {
           trainable = false;
           return;
         }
@@ -433,9 +463,9 @@ const EmotionRecognition = withStyles((theme) => ({
       if (trainable) {
         classifier.current.train((loss) => {
           if (loss === null) {
-            classifier.current.classify();
+            classifier.current.classify(gotClassifierResults);
           } else {
-            progress = p5.lerp(progress, 100, 0.2);
+            progress = new p5().lerp(progress, 100, 0.2);
             setTrainingProgress(progress);
           }
         });
@@ -443,82 +473,126 @@ const EmotionRecognition = withStyles((theme) => ({
     });
   }
 
+  function gotClassifierResults(error, results) {
+    if (error) {
+      console.log(error);
+    } else {
+      results.forEach((predictedEmotion) => {
+        let _emotions = emotions.map((emotion) => {
+          if (emotion.name === predictedEmotion.label) {
+            emotion.probability = predictedEmotion.confidence * 100;
+          }
+
+          return emotion;
+        });
+
+        setEmotions(_emotions);
+      });
+    }
+
+    classifier.current.classify(gotClassifierResults);
+  }
+
   //
 
   return (
-    <div>
-      <Paper
-        variant="outlined"
-        classes={{
-          root: classes.leftContainer,
+    <div className={classes.container}>
+      <div
+        style={{
+          width: '100%',
+          height: '150px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        <div id="video-container" className={classes.videoContainer}></div>
-        <FormControlLabel
-          value={showLandmarks.current}
-          control={
-            <Checkbox
-              color="primary"
-              onChange={(event) =>
-                (showLandmarks.current = event.target.checked)
-              }
-            />
-          }
-          label="Mostrar landmarks"
-          labelPlacement="start"
-        />
+        <Typography variant="h3">Reconocimiento de emociones</Typography>
+      </div>
+      <div className={classes.content}>
         <Paper
           variant="outlined"
-          style={{
-            margin: 10,
+          classes={{
+            root: classes.leftContainer,
           }}
         >
-          {emotions.map((emotion, index) => {
-            return (
-              <LinearProgressWithLabel
-                key={index}
-                value={emotion.probability}
-                label={emotion.name}
-                barColor={emotion.color}
-              />
-            );
-          })}
+          <EmotionInput
+            onButtonClick={handleNewEmotion}
+            enable={initializing}
+          />
+          <Paper className={classes.emotionListContainer}>
+            {emotions.map(({ name, numberOfSamples, color }, index) => {
+              return (
+                <EmotionInfo
+                  deleteEnabled={initializing}
+                  key={index}
+                  index={index}
+                  emotion={name}
+                  numberOfSamples={numberOfSamples}
+                  onDeleteClick={handleDeleteEmotion}
+                  onCaptureClick={handleCaptureClick}
+                  color={color}
+                />
+              );
+            })}
+          </Paper>
+          <Paper className={classes.trainingSection}>
+            <Button
+              disabled={emotions.length < 2}
+              variant="contained"
+              color="primary"
+              onClick={() => loadMobileNet(emotions)}
+            >
+              {currentAction}
+            </Button>
+            <LinearProgressWithLabel value={trainingProgress} />
+          </Paper>
         </Paper>
-      </Paper>
-      <Paper
-        variant="outlined"
-        classes={{
-          root: classes.leftContainer,
-        }}
-      >
-        <EmotionInput onButtonClick={handleNewEmotion} enable={initializing} />
-        <Paper className={classes.emotionListContainer}>
-          {emotions.map(({ name, numberOfSamples, color }, index) => {
-            return (
-              <EmotionInfo
-                deleteEnabled={initializing}
-                key={index}
-                index={index}
-                emotion={name}
-                numberOfSamples={numberOfSamples}
-                onClick={handleDeleteEmotion}
-                color={color}
-              />
-            );
-          })}
-        </Paper>
-        <Paper className={classes.trainingSection}>
-          <Button
-            disabled={emotions.length < 2}
-            variant="contained"
-            color="primary"
-            onClick={() => loadMobileNet(emotions)}
+        <Paper
+          variant="outlined"
+          classes={{
+            root: classes.rightContainer,
+          }}
+        >
+          <div id="video-container" className={classes.videoContainer}></div>
+          <FormGroup>
+            <FormControlLabel
+              value={showLandmarks.current}
+              control={
+                <Checkbox
+                  color="primary"
+                  onChange={(event) =>
+                    (showLandmarks.current = event.target.checked)
+                  }
+                />
+              }
+              label="Mostrar landmarks"
+              labelPlacement="start"
+              style={{
+                marginRight: 0,
+              }}
+            />
+          </FormGroup>
+          <Paper
+            variant="outlined"
+            style={{
+              margin: 10,
+              overflow: 'auto',
+              height: '100%',
+            }}
           >
-            Entrenar modelo
-          </Button>
-          <LinearProgressWithLabel value={trainingProgress} />
+            {emotions.map((emotion, index) => {
+              return (
+                <LinearProgressWithLabel
+                  key={index}
+                  value={emotion.probability}
+                  label={emotion.name}
+                  barColor={emotion.color}
+                />
+              );
+            })}
+          </Paper>
         </Paper>
-      </Paper>
+      </div>
     </div>
   );
 });
