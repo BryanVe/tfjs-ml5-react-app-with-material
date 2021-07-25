@@ -1,7 +1,7 @@
 import React from 'react';
 import { GeneralLayout } from 'layout';
 import { EmotionRecognition } from './components';
-
+import {FaceMask} from 'components'
 import { BodyPixCapture } from 'components'
 // import '@tensorflow/tfjs-backend-webgl';
 
@@ -19,11 +19,11 @@ const App = () => {
       component: () => <EmotionRecognition />,
     },
     {
-      iconName: 'HM',
+      iconName:'FM',
       onIconClick: () => setRenderedComponentIndex(2),
-      component: () => <div>HM</div>,
-    },
-  ];
+      component: () => <FaceMask></FaceMask>
+    }
+  ]
 
   const switchBetweenViews = () => {
     const Component = views[renderedComponentIndex].component;
