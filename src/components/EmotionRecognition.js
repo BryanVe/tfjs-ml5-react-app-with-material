@@ -9,6 +9,7 @@ import {
   LinearProgress,
   FormControlLabel,
   Checkbox,
+  makeStyles,
 } from '@material-ui/core';
 import {
   AddCircle as AddIcon,
@@ -17,7 +18,6 @@ import {
 import { useState, useEffect, useRef } from 'react';
 import * as ml5 from 'ml5';
 import * as p5 from 'p5';
-import { result } from 'lodash';
 
 const EmotionInput = withStyles((theme) => ({
   root: {
@@ -33,18 +33,20 @@ const EmotionInput = withStyles((theme) => ({
   iconButton: {
     padding: 10,
   },
-}))(({ classes, onButtonClick }) => {
+}))(({ classes, onButtonClick, enable }) => {
   const [name, setName] = useState('');
 
   return (
     <Paper variant="outlined" className={classes.root}>
       <InputBase
+        disabled={!enable}
         value={name}
         className={classes.input}
         onChange={(event) => setName(event.target.value)}
         placeholder="Ingrese la etiqueta de una emoción"
       />
       <IconButton
+        disabled={!enable}
         className={classes.iconButton}
         onClick={() => {
           onButtonClick(name);
@@ -88,38 +90,60 @@ const EmotionInfo = withStyles((theme) => ({
   white: {
     color: 'white',
   },
-}))(({ classes, emotion, numberOfSamples, index, onClick, color }) => {
-  return (
-    <Paper variant="outlined" className={classes.root}>
-      <IconButton className={classes.delete} onClick={() => onClick(index)}>
-        <DeleteIcon />
-      </IconButton>
-      <div className={classes.info} style={{ backgroundColor: color }}>
-        <Typography
-          variant="h6"
-          classes={{
-            root: classes.white,
-          }}
+}))(
+  ({
+    classes,
+    emotion,
+    numberOfSamples,
+    index,
+    onClick,
+    color,
+    deleteEnabled,
+  }) => {
+    return (
+      <Paper variant="outlined" className={classes.root}>
+        {deleteEnabled && (
+          <IconButton className={classes.delete} onClick={() => onClick(index)}>
+            <DeleteIcon />
+          </IconButton>
+        )}
+        <div className={classes.info} style={{ backgroundColor: color }}>
+          <Typography
+            variant="h6"
+            classes={{
+              root: classes.white,
+            }}
+          >
+            {emotion}
+          </Typography>
+          <Typography
+            variant="h6"
+            classes={{
+              root: classes.white,
+            }}
+          >
+            {numberOfSamples}
+          </Typography>
+        </div>
+        <Button
+          variant="contained"
+          color="secondary"
+          className={classes.button}
         >
-          {emotion}
-        </Typography>
-        <Typography
-          variant="h6"
-          classes={{
-            root: classes.white,
-          }}
-        >
-          {numberOfSamples}
-        </Typography>
-      </div>
-      <Button variant="contained" color="secondary" className={classes.button}>
-        Capturar emoción
-      </Button>
-    </Paper>
-  );
-});
+          Capturar emoción
+        </Button>
+      </Paper>
+    );
+  }
+);
 
 const LinearProgressWithLabel = (props) => {
+  const classes = makeStyles({
+    bar: {
+      backgroundColor: props.barColor,
+    },
+  })();
+
   return (
     <Box
       display="flex"
@@ -136,7 +160,13 @@ const LinearProgressWithLabel = (props) => {
         </Box>
       )}
       <Box width="100%" mr={1}>
-        <LinearProgress variant="determinate" {...props} />
+        <LinearProgress
+          variant="determinate"
+          value={props.value}
+          classes={{
+            bar1Determinate: classes.bar,
+          }}
+        />
       </Box>
       <Box minWidth={35}>
         <Typography variant="body2" color="textSecondary">{`${Math.round(
@@ -180,21 +210,18 @@ const EmotionRecognition = withStyles((theme) => ({
     '#ffc400',
   ];
 
-  let p5Instance = null;
-
-  const videoContainerRef = useRef(null);
-
   const [emotions, setEmotions] = useState([
     {
       name: 'Feliz',
       numberOfSamples: 100,
+      probability: 30,
       color: colors[Math.floor(Math.random() * colors.length)],
     },
   ]);
 
   const [trainingProgress, setTrainingProgress] = useState(0);
 
-  const [showLandmarks, setShowLandmarks] = useState(false);
+  const [initializing, setInitializing] = useState(true);
 
   const handleNewEmotion = (name) => {
     let _emotions = [...emotions];
@@ -228,140 +255,195 @@ const EmotionRecognition = withStyles((theme) => ({
   //     };
   //   }, []);
 
-  const classifierResults = (error, results) => {
-    if (error) {
-      console.log(error);
-    } else {
-      result.forEach((emotion) => {});
-    }
+  //
+
+  let faceapi = useRef();
+  let mobilenet = useRef();
+  let classifier = useRef();
+  let showLandmarks = useRef(false);
+  let video = useRef();
+  let detections;
+  const width = 400;
+  const height = 300;
+  let canvas = useRef();
+  let ctx;
+
+  // by default all options are set to true
+  const detectionOptions = {
+    withLandmarks: true,
+    withDescriptors: false,
   };
 
-  const s = (sketch) => {
-    let video;
-    let canvas;
-    let faceApi;
-    let mobileNet;
-    let classifier;
+  useEffect(() => {
+    make();
+  }, []);
 
-    const detectionOptions = {
-      withLandmarks: true,
-      withDescriptors: false,
-    };
+  async function make() {
+    // get the video
+    video.current = await getVideo();
 
-    sketch.setup = () => {
-      video = sketch.createCapture('VIDEO');
-      video.parent('video-container');
-      video.size(
-        videoContainerRef.current.clientWidth,
-        (videoContainerRef.current.clientWidth * 3) / 4
-      );
-      video.position(0, 0);
-      video.elt.muted = true;
-      video.hide();
+    canvas.current = createCanvas(width, height);
+    ctx = canvas.current.getContext('2d');
 
-      canvas = sketch.createCanvas(
-        videoContainerRef.current.clientWidth,
-        (videoContainerRef.current.clientWidth * 3) / 4
-      );
-      canvas.parent('video-container');
+    faceapi.current = ml5.faceApi(video.current, detectionOptions, modelReady);
+  }
 
-      faceApi = ml5.faceApi(video, detectionOptions, () => {
-        faceApi.detect(faceApiResults);
-      });
+  function modelReady() {
+    console.log('ready!');
+    faceapi.current.detect(gotFaceApiResults);
+  }
 
-      mobileNet = ml5.featureExtractor(
+  let gotFaceApiResults = (err, result) => {
+    if (err) {
+      console.log(err);
+      return;
+    }
+
+    detections = result;
+
+    // Clear part of the canvas
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.drawImage(video.current, 0, 0, width, height);
+
+    if (detections) {
+      if (detections.length > 0) {
+        drawBox(detections);
+
+        if (showLandmarks.current) {
+          drawLandmarks(detections);
+        }
+      }
+    }
+
+    faceapi.current.detect(gotFaceApiResults);
+  };
+
+  function drawBox(detections) {
+    for (let i = 0; i < detections.length; i += 1) {
+      const alignedRect = detections[i].alignedRect;
+      const x = alignedRect._box._x;
+      const y = alignedRect._box._y;
+      const boxWidth = alignedRect._box._width;
+      const boxHeight = alignedRect._box._height;
+
+      ctx.beginPath();
+      ctx.rect(x, y, boxWidth, boxHeight);
+      ctx.strokeStyle = '#a15ffb';
+      ctx.stroke();
+      ctx.closePath();
+    }
+  }
+
+  function drawLandmarks(detections) {
+    for (let i = 0; i < detections.length; i += 1) {
+      const mouth = detections[i].parts.mouth;
+      const nose = detections[i].parts.nose;
+      const leftEye = detections[i].parts.leftEye;
+      const rightEye = detections[i].parts.rightEye;
+      const rightEyeBrow = detections[i].parts.rightEyeBrow;
+      const leftEyeBrow = detections[i].parts.leftEyeBrow;
+
+      drawPart(mouth, true);
+      drawPart(nose, false);
+      drawPart(leftEye, true);
+      drawPart(leftEyeBrow, false);
+      drawPart(rightEye, true);
+      drawPart(rightEyeBrow, false);
+    }
+  }
+
+  function drawPart(feature, closed) {
+    ctx.beginPath();
+    for (let i = 0; i < feature.length; i += 1) {
+      const x = feature[i]._x;
+      const y = feature[i]._y;
+
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+
+    if (closed === true) {
+      ctx.closePath();
+    }
+    ctx.stroke();
+  }
+
+  // Helper Functions
+  async function getVideo() {
+    // Grab elements, create settings, etc.
+    const videoElement = document.createElement('video');
+    videoElement.setAttribute('style', 'display: none;');
+    videoElement.width = width;
+    videoElement.height = height;
+    document.getElementById('video-container').appendChild(videoElement);
+
+    // Create a webcam capture
+    const capture = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: false,
+    });
+    videoElement.srcObject = capture;
+    videoElement.play();
+
+    return videoElement;
+  }
+
+  function createCanvas(w, h) {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    document.getElementById('video-container').appendChild(canvas);
+    return canvas;
+  }
+
+  //
+
+  function loadMobileNet(emotions) {
+    setInitializing(false);
+
+    if (mobilenet.current == null) {
+      mobilenet.current = ml5.featureExtractor(
         'MobileNet',
         {
           numLabels: emotions.length,
         },
         () => {
-          console.log('MobileNet model loaded!');
+          console.log('MobileNet input video ready!');
         }
       );
+    }
 
-      classifier = mobileNet.classification(video, () => {
-        console.log('Video is ready!');
-      });
-    };
+    classifier.current = mobilenet.current.classification(video.current, () => {
+      let progress = 0;
 
-    const faceApiResults = (err, result) => {
-      if (err) {
-        console.log(err);
-        return;
-      }
+      let trainable = emotions.length >= 2;
 
-      let detections = result;
-
-      sketch.background(255);
-      sketch.image(video, 0, 0, sketch.width, sketch.height);
-
-      if (detections) {
-        if (detections.length > 0) {
-          console.log(showLandmarks);
-          drawBox(detections);
-          drawLandmarks(detections);
+      emotions.forEach((emotion) => {
+        if (emotion.numberOfSamples == 0) {
+          trainable = false;
+          return;
         }
+      });
+
+      if (trainable) {
+        classifier.current.train((loss) => {
+          if (loss === null) {
+            classifier.current.classify();
+          } else {
+            progress = p5.lerp(progress, 100, 0.2);
+            setTrainingProgress(progress);
+          }
+        });
       }
+    });
+  }
 
-      faceApi.detect(faceApiResults);
-    };
-
-    function drawLandmarks(detections) {
-      sketch.noFill();
-      sketch.stroke(161, 95, 251);
-      sketch.strokeWeight(2);
-
-      for (let i = 0; i < detections.length; i += 1) {
-        const mouth = detections[i].parts.mouth;
-        const nose = detections[i].parts.nose;
-        const leftEye = detections[i].parts.leftEye;
-        const rightEye = detections[i].parts.rightEye;
-        const rightEyeBrow = detections[i].parts.rightEyeBrow;
-        const leftEyeBrow = detections[i].parts.leftEyeBrow;
-
-        drawPart(mouth, true);
-        drawPart(nose, false);
-        drawPart(leftEye, true);
-        drawPart(leftEyeBrow, false);
-        drawPart(rightEye, true);
-        drawPart(rightEyeBrow, false);
-      }
-    }
-
-    function drawBox(detections) {
-      for (let i = 0; i < detections.length; i += 1) {
-        const alignedRect = detections[i].alignedRect;
-        const x = alignedRect._box._x;
-        const y = alignedRect._box._y;
-        const boxWidth = alignedRect._box._width;
-        const boxHeight = alignedRect._box._height;
-
-        sketch.noFill();
-        sketch.stroke(161, 95, 251);
-        sketch.strokeWeight(2);
-        sketch.rect(x, y, boxWidth, boxHeight);
-      }
-    }
-
-    function drawPart(feature, closed) {
-      sketch.beginShape();
-      for (let i = 0; i < feature.length; i += 1) {
-        const x = feature[i]._x;
-        const y = feature[i]._y;
-        sketch.vertex(x, y);
-      }
-
-      if (closed === true) {
-        sketch.endShape('CLOSE');
-      } else {
-        sketch.endShape();
-      }
-    }
-  };
-
-  useEffect(() => {
-    p5Instance = new p5(s);
-  }, []);
+  //
 
   return (
     <div>
@@ -371,17 +453,15 @@ const EmotionRecognition = withStyles((theme) => ({
           root: classes.leftContainer,
         }}
       >
-        <div
-          ref={videoContainerRef}
-          id="video-container"
-          className={classes.videoContainer}
-        ></div>
+        <div id="video-container" className={classes.videoContainer}></div>
         <FormControlLabel
-          value={showLandmarks}
+          value={showLandmarks.current}
           control={
             <Checkbox
               color="primary"
-              onChange={(event) => setShowLandmarks(event.target.checked)}
+              onChange={(event) =>
+                (showLandmarks.current = event.target.checked)
+              }
             />
           }
           label="Mostrar landmarks"
@@ -397,8 +477,9 @@ const EmotionRecognition = withStyles((theme) => ({
             return (
               <LinearProgressWithLabel
                 key={index}
-                value={trainingProgress}
+                value={emotion.probability}
                 label={emotion.name}
+                barColor={emotion.color}
               />
             );
           })}
@@ -410,11 +491,12 @@ const EmotionRecognition = withStyles((theme) => ({
           root: classes.leftContainer,
         }}
       >
-        <EmotionInput onButtonClick={handleNewEmotion} />
+        <EmotionInput onButtonClick={handleNewEmotion} enable={initializing} />
         <Paper className={classes.emotionListContainer}>
           {emotions.map(({ name, numberOfSamples, color }, index) => {
             return (
               <EmotionInfo
+                deleteEnabled={initializing}
                 key={index}
                 index={index}
                 emotion={name}
@@ -426,7 +508,12 @@ const EmotionRecognition = withStyles((theme) => ({
           })}
         </Paper>
         <Paper className={classes.trainingSection}>
-          <Button variant="contained" color="primary">
+          <Button
+            disabled={emotions.length < 2}
+            variant="contained"
+            color="primary"
+            onClick={() => loadMobileNet(emotions)}
+          >
             Entrenar modelo
           </Button>
           <LinearProgressWithLabel value={trainingProgress} />
