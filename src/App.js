@@ -1,12 +1,16 @@
 import React from 'react';
 import { GeneralLayout } from 'layout';
 import { EmotionRecognition } from './components';
-import {FaceMask} from 'components'
 import { BodyPixCapture } from 'components'
-// import '@tensorflow/tfjs-backend-webgl';
+import { useLocation } from 'react-router-dom';
+
+const faceMaskLink = 'https://ai-on-web-face-mask.netlify.app/'
 
 const App = () => {
-  const [renderedComponentIndex, setRenderedComponentIndex] = React.useState(0);
+  const search = useLocation().search
+  const indexString = new URLSearchParams(search).get('i')
+  const index = indexString ? parseInt(indexString) : 0
+  const [renderedComponentIndex, setRenderedComponentIndex] = React.useState(index >= 0 && index < 3 ? index : 0);
   const views = [
     {
       iconName: 'MF',
@@ -20,8 +24,10 @@ const App = () => {
     },
     {
       iconName:'FM',
-      onIconClick: () => setRenderedComponentIndex(2),
-      component: () => <FaceMask></FaceMask>
+      onIconClick: () => {
+        window.location.href = faceMaskLink
+      },
+      component: () => <a href={faceMaskLink}>redirect to face mask</a>
     }
   ]
 
