@@ -30,3 +30,8 @@ This project was bootstrapped with [`Create React App`](https://github.com/faceb
   # run project
   yarn start
   ```
+
+### Note
+
+The face mask module was moved to the next project [`https://github.com/BryanVe/tfjs-ml5-face-landmark`](https://github.com/BryanVe/tfjs-ml5-face-landmark)
+for solving dependencies problem between [`ml5`](https://www.npmjs.com/package/ml5) and [`@tensorflow/tfjs`](https://www.npmjs.com/package/@tensorflow/tfjs).
