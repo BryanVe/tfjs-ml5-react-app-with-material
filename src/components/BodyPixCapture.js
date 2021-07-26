@@ -161,7 +161,7 @@ const BodyPixCapture = () => {
                 //     segmentation, foregroundColor, backgroundColor);
                 const backgroundDarkeningMask = bodyPix.toMaskImageData(segmentation, true);
                 const opacity = 1;
-                const maskBlurAmount = 3;
+                const maskBlurAmount = 0;
                 const flipHorizontal = false;
                 bodyPix.drawMask(
                   output, source, backgroundDarkeningMask, opacity, maskBlurAmount, flipHorizontal);
